@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>べあ～君キャッチゲーム</title>
+
+<style>
+body{
+    margin:0;
+    overflow:hidden;
+    background:#f5f5f5;
+    font-family:sans-serif;
+}
+
+#gameCanvas{
+    display:block;
+    margin:auto;
+    touch-action:none;
+}
+#titleScreen{
+
+    position:fixed;
+
+    width:100vw;
+    height:100vh;
+
+    background:url("title2.png") center center no-repeat;
+    background-size:cover;
+
+    z-index:999;
+}
+
+#startBtn{
+
+    position:absolute;
+
+    left:50%;
+    transform:translateX(-50%);
+
+    bottom:70px;
+
+    width:220px;
+    height:70px;
+
+    font-size:30px;
+}   
+
+#titleScreen h2{
+
+    margin:10px 0;
+
+}
+
+#startBtn{
+
+    position:absolute;
+
+    left:50%;
+    bottom:90px;
+
+    transform:translateX(-50%);
+
+    width:220px;
+    height:70px;
+
+    border:4px solid #efa91f;
+    border-radius:40px;
+
+    background:linear-gradient(
+        to bottom,
+        #f9d132 0%,
+        #f7af33 50%,
+        #f3a617 100%
+    );
+
+    color:white;
+
+    font-size:30px;
+    font-weight:bold;
+
+    cursor:pointer;
+
+    box-shadow:
+        0 10px 0 #d7910f,
+        0 16px 24px rgba(0,0,0,.30);
+
+    transition:0.08s;
+}
+#startBtn:active{
+
+    transform:translateX(-50%) translateY(8px);
+
+    box-shadow:
+        0 2px 0 #e05712,
+        0 6px 12px rgba(0,0,0,.25);
+
+}
+#ui{
+    position:absolute;
+    top:10px;
+    left:50%;
+    transform:translateX(-50%);
+    font-size:24px;
+    font-weight:bold;
+    color:white;
+    text-shadow:1px 1px 4px rgba(0,0,0,0.8);
+    z-index:10;
+}
+</style>
+</head>
+
+<body>
+
+<div id="titleScreen">
+
+    <button id="startBtn">
+        START
+    </button>
+
+</div>
+
+<div id="ui">
+    Score: <span id="score">0</span>
+    |
+    Time: <span id="time">30</span>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const GAME_WIDTH = 400;
+const GAME_HEIGHT = 700;
+const scale = window.devicePixelRatio || 1;
+
+canvas.width = GAME_WIDTH * scale;
+canvas.height = GAME_HEIGHT * scale;
+
+canvas.style.width = GAME_WIDTH + "px";
+canvas.style.height = GAME_HEIGHT + "px";
+
+ctx.scale(scale, scale);
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = "high";
+
+// 图片
+const bg = new Image();
+bg.src = "back5.jpg";
+
+const bearImg = new Image();
+bearImg.src = "bear2.png";
+
+// 正确道具
+const goodImages = [];
+
+const bed = new Image();
+bed.src = "flower.png";
+goodImages.push(bed);
+
+const sofa = new Image();
+sofa.src = "sofa2.png";
+goodImages.push(sofa);
+
+const mushi = new Image();
+mushi.src = "mushi.png";
+
+const key = new Image();
+key.src = "key.png";
+goodImages.push(key);
+
+// 游戏数据
+let gameStarted = false;
+let score = 0;
+let timeLeft = 30;
+let gameOver = false;
+
+let effectText = "";
+let effectTimer = 0;
+
+const player = {
+    x:115,
+    y:500,
+    width:130,
+    height:180,
+    speed:8
+};
+
+const items = [];
+const keys = {};
+
+// 键盘控制
+document.addEventListener("keydown",(e)=>{
+    keys[e.key] = true;
+});
+
+document.addEventListener("keyup",(e)=>{
+    keys[e.key] = false;
+});
+
+// 手机拖动
+canvas.addEventListener("touchstart",(e)=>{
+    const rect = canvas.getBoundingClientRect();
+
+    player.x =
+        e.touches[0].clientX
+        - rect.left
+        - player.width/2;
+});
+
+canvas.addEventListener("touchmove",(e)=>{
+    const rect = canvas.getBoundingClientRect();
+
+    player.x =
+        e.touches[0].clientX
+        - rect.left
+        - player.width/2;
+
+    player.x = Math.max(
+        0,
+        Math.min(
+            GAME_WIDTH-player.width,
+            player.x
+        )
+    );
+
+    e.preventDefault();
+
+},{passive:false});
+
+// 掉落物生成
+function createItem(){
+
+    const type = Math.random() < 0.7 ? "good" : "bad";
+
+    let selectedImg;
+
+    if(type === "good"){
+
+        selectedImg =
+            goodImages[
+                Math.floor(Math.random()*goodImages.length)
+            ];
+
+    }else{
+
+        selectedImg = mushi;
+
+    }
+
+    let itemWidth;
+let itemHeight;
+
+if(type === "good"){
+
+    selectedImg =
+        goodImages[
+            Math.floor(Math.random()*goodImages.length)
+        ];
+
+    itemWidth = 60;
+    itemHeight = 60;
+
+}else{
+
+    selectedImg = mushi;
+
+    itemWidth = 40;
+    itemHeight = 40;
+
+}
+
+items.push({
+
+    x:Math.random()*(GAME_WIDTH-itemWidth),
+    y:-itemHeight,
+
+    width:itemWidth,
+    height:itemHeight,
+
+    speed:3+Math.random()*3,
+
+    type:type,
+    img:selectedImg,
+
+    rotation:Math.random()*Math.PI*2,
+    rotationSpeed:(Math.random()-0.5)*0.08
+
+});
+
+}
+
+setInterval(()=>{
+
+    if(gameStarted && !gameOver){
+
+        createItem();
+
+    }
+
+},800);
+
+// 更新
+function update(){
+
+    if(!gameStarted) return;
+
+    if(gameOver) return;
+
+    if(keys["ArrowLeft"]){
+        player.x -= player.speed;
+    }
+
+    if(keys["ArrowRight"]){
+        player.x += player.speed;
+    }
+
+    player.x = Math.max(
+        0,
+        Math.min(
+            GAME_WIDTH-player.width,
+            player.x
+        )
+    );
+
+    for(let i=items.length-1;i>=0;i--){
+
+        let item = items[i];
+
+        item.y += item.speed;
+
+        // 碰撞检测（碰到直接消失）
+        if(
+            player.x < item.x + item.width &&
+            player.x + player.width > item.x &&
+            player.y < item.y + item.height &&
+            player.y + player.height > item.y
+        ){
+
+            if(item.type === "good"){
+
+                score += 10;
+
+            }else{
+
+                score -= 10;
+                effectText = "MISS! -10";
+                effectTimer = 60;
+
+            }
+
+            document.getElementById("score").textContent = score;
+
+            items.splice(i,1);
+
+            continue;
+        }
+
+        // 掉出画面
+        if(item.y > GAME_HEIGHT){
+            items.splice(i,1);
+        }
+    }
+}
+
+// 绘制
+function draw(){
+
+    ctx.clearRect(0,0,GAME_WIDTH,GAME_HEIGHT);
+
+    if(bg.complete){
+        ctx.drawImage(
+            bg,
+            0,
+            0,
+            GAME_WIDTH,
+            GAME_HEIGHT
+        );
+    }
+
+    // bear
+    if(bearImg.complete){
+        ctx.drawImage(
+            bearImg,
+            player.x,
+            player.y,
+            player.width,
+            player.height
+        );
+    }
+
+    // 掉落物
+items.forEach(item=>{
+
+    if(item.img.complete){
+
+        ctx.drawImage(
+            item.img,
+            item.x,
+            item.y,
+            item.width,
+            item.height
+        );
+
+    }
+
+});
+
+    // MISS提示
+    if(effectTimer > 0){
+
+        ctx.font = "48px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillStyle = "red";
+
+        ctx.fillText(
+            effectText,
+            GAME_WIDTH/2,
+            200
+        );
+
+        effectTimer--;
+    }
+
+    // Game Over
+    if(gameOver){
+
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
+        ctx.fillRect(
+            0,
+            0,
+            GAME_WIDTH,
+            GAME_HEIGHT
+        );
+
+        ctx.fillStyle = "white";
+        ctx.font = "36px sans-serif";
+        ctx.textAlign = "center";
+
+        ctx.fillText(
+            "GAME OVER",
+            GAME_WIDTH/2,
+            300
+        );
+
+        ctx.fillText(
+            "Score : " + score,
+            GAME_WIDTH/2,
+            360
+        );
+    }
+}
+
+// 主循环
+function gameLoop(){
+
+    update();
+    draw();
+
+    requestAnimationFrame(gameLoop);
+
+}
+
+gameLoop();
+
+// 倒计时
+const timer = setInterval(()=>{
+
+    if(!gameStarted) return;
+
+    if(gameOver) return;
+
+    timeLeft--;
+
+    document.getElementById("time").textContent = timeLeft;
+
+    if(timeLeft <= 0){
+        gameOver = true;
+    }
+
+},1000);
+document.getElementById("startBtn").onclick=function(){
+
+    // 清空旧道具
+    items.length = 0;
+
+    score = 0;
+    timeLeft = 30;
+    gameOver = false;
+
+    document.getElementById("score").textContent = score;
+    document.getElementById("time").textContent = timeLeft;
+
+    gameStarted = true;
+
+    document.getElementById("titleScreen").style.display = "none";
+
+}
+
+</script>
+
+</body>
+</html>
